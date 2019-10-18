@@ -31,6 +31,7 @@ from transformers import BertForSequenceClassification
 from .bert_layers import BertLayerNorm
 from fastprogress.fastprogress import master_bar, progress_bar
 import torch
+from torch.nn import BCEWithLogitsLoss
 import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_curve, auc
@@ -50,7 +51,7 @@ class BertLearner(Learner):
     def from_pretrained_model(dataBunch, pretrained_path, output_dir, metrics, device, logger, finetuned_wgts_path=None, 
                               multi_gpu=True, is_fp16=True, loss_scale=0, warmup_steps=0, fp16_opt_level='O1',
                               grad_accumulation_steps=1, multi_label=False, max_grad_norm=1.0, adam_epsilon=1e-8, 
-                              logging_steps=100):
+                              logging_steps=100, class_weights=None):
         
         model_state_dict = None
         
@@ -75,12 +76,13 @@ class BertLearner(Learner):
             
         return BertLearner(dataBunch, model, pretrained_path, output_dir, metrics, device, logger,
                            multi_gpu, is_fp16, loss_scale, warmup_steps, fp16_opt_level, grad_accumulation_steps, 
-                           multi_label, max_grad_norm, adam_epsilon, logging_steps)
+                           multi_label, max_grad_norm, adam_epsilon, logging_steps, class_weights)
              
         
     def __init__(self, data: BertDataBunch, model: nn.Module, pretrained_model_path, output_dir, metrics, device,logger,
                  multi_gpu=True, is_fp16=True, loss_scale=0, warmup_steps=0, fp16_opt_level='O1',
-                 grad_accumulation_steps=1, multi_label=False, max_grad_norm=1.0, adam_epsilon=1e-8, logging_steps=100):
+                 grad_accumulation_steps=1, multi_label=False, max_grad_norm=1.0, adam_epsilon=1e-8, logging_steps=100,
+                 class_weights=None):
         
         super(BertLearner, self).__init__(data, model, pretrained_model_path, output_dir, device, logger, 
                                             multi_gpu, is_fp16, warmup_steps, fp16_opt_level, grad_accumulation_steps,
@@ -90,10 +92,20 @@ class BertLearner(Learner):
         self.multi_label = multi_label
         self.metrics = metrics
         self.bn_types = (BertLayerNorm, FusedLayerNorm)
+        self.set_multi_label_loss_func(class_weights)
+    
+    def set_multi_label_loss_func(self, class_weights):
+        if self.multi_label:
+            self.loss_func = BCEWithLogitsLoss(pos_weight=torch.tensor(class_weights, dtype=torch.float32))
+            self.loss_func.to(self.device)
 
-        
-    
-    
+    def compute_loss(self, logits, labels, num_labels):
+        loss = self.loss_func(
+            logits.view(-1, num_labels),
+            labels.view(-1, num_labels)
+        )
+        return loss
+
     def freeze_to(self, n:int)->None:
         "Freeze layers up to layer group `n`."
         for g in self.layer_groups[:n]:
@@ -219,7 +231,7 @@ class BertLearner(Learner):
                     inputs['token_type_ids'] = batch[2]
                     
                 outputs = self.model(**inputs)
-                loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
+                loss = self.compute_loss(outputs[0], batch[3], self.model.num_labels)
 
                 if self.n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu parallel training
@@ -309,7 +321,8 @@ class BertLearner(Learner):
                     inputs['token_type_ids'] = batch[2]
                     
                 outputs = self.model(**inputs)
-                tmp_eval_loss, logits = outputs[:2]
+                logits = outputs[0]
+                tmp_eval_loss = self.compute_loss(logits, batch[3], self.model.num_labels)
             
                 
                 eval_loss += tmp_eval_loss.mean().item()
