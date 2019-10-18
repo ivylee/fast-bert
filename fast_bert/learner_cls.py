@@ -96,7 +96,7 @@ class BertLearner(Learner):
     
     def set_multi_label_loss_func(self, class_weights):
         if self.multi_label:
-            self.loss_func = BCEWithLogitsLoss(pos_weight=torch.tensor(class_weights, dtype=torch.float32))
+            self.loss_func = BCEWithLogitsLoss(pos_weight=class_weights)
             self.loss_func.to(self.device)
 
     def compute_loss(self, logits, labels, num_labels):
