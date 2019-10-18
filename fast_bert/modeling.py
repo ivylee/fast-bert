@@ -30,7 +30,7 @@ class DistilBertForMultiLabelSequenceClassification(DistilBertForSequenceClassif
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
+        logits = outputs[0]
     """
 
     def forward(self, input_ids,  attention_mask=None, labels=None, head_mask=None):
@@ -46,14 +46,7 @@ class DistilBertForMultiLabelSequenceClassification(DistilBertForSequenceClassif
         logits = self.classifier(pooled_output)              # (bs, dim)
 
         outputs = (logits,) + distilbert_output[1:]
-        if labels is not None:
-            loss_fct = BCEWithLogitsLoss()
-
-            loss = loss_fct(logits.view(-1, self.num_labels),
-                            labels.view(-1, self.num_labels))
-            outputs = (loss,) + outputs
-
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        return outputs  # logits, (hidden_states), (attentions)
 
 
 class RobertaForMultiLabelSequenceClassification(RobertaForSequenceClassification):
