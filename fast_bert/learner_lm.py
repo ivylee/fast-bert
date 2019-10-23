@@ -49,6 +49,7 @@ class BertLMLearner(Learner):
         
         if isinstance(output_dir, str):
             output_dir = Path(output_dir)
+        output_dir.mkdir(exist_ok=True)
         
         self.data = data
         self.model = model
