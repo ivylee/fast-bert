@@ -93,10 +93,8 @@ class BertLMLearner(Learner):
             t_total = len(train_dataloader) // self.grad_accumulation_steps * epochs
         
         # Prepare optimiser and schedule 
-        optimizer = get_optimizer(self.model, lr, 
-                                  weight_decay=self.weight_decay, adam_epsilon=self.adam_epsilon, 
-                                  optimizer_type=optimizer_type)
-        
+        optimizer = self.get_optimizer(lr, optimizer_type=optimizer_type)
+
         # get the base model if its already wrapped around DataParallel
         if hasattr(self.model, 'module'):
             self.model = self.model.module
