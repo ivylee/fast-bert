@@ -107,8 +107,8 @@ class BertLMLearner(Learner):
             self.model, optimizer = amp.initialize(self.model, optimizer, opt_level=self.fp16_opt_level)
         
         # Get scheduler
-        scheduler = get_scheduler(optimizer, warmup_steps=self.warmup_steps, t_total=t_total, schedule_type=schedule_type)
-        
+        scheduler = self.get_scheduler(optimizer, t_total=t_total, schedule_type=schedule_type)
+
         # Parallelize the model architecture
         if self.multi_gpu == True:
             self.model = torch.nn.DataParallel(self.model)
